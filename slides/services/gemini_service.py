@@ -61,8 +61,7 @@ class GeminiService:
            - Good: "photosynthesis diagram", "Abraham Lincoln portrait", "DNA double helix"
            - Bad: "a diagram showing how photosynthesis works for 5th grade students" (Too specific, will fail)
         5. Prioritize including at least one image per slide if the layout permits.
-        6. Keep text content concise to avoid overflow. 
-        7. **IMPORTANT**: Do NOT use bullet points (* or -) in the text. PowerPoint adds bullets automatically. Just separate distinct points with newlines.
+        6. **IMPORTANT**: Do NOT use bullet points (* or -) in the text. PowerPoint adds bullets automatically. Just separate distinct points with newlines.
         
         Output purely JSON.
         """

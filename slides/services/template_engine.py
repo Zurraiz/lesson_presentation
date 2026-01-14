@@ -113,13 +113,35 @@ class TemplateManager:
                     continue
                 shape.text = value
                 
-                # Enable Auto-Fit "Shrink text on overflow"
+                # Manual Dynamic Font Scaling
+                # Heuristic: The more text, the smaller the font.
                 try:
-                    from pptx.enum.text import MSO_AUTO_SIZE
-                    shape.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
-                    shape.text_frame.word_wrap = True
-                except Exception:
-                    pass
+                     text_len = len(value)
+                     # Get the first paragraph/run to set font
+                     if shape.text_frame.paragraphs:
+                         p = shape.text_frame.paragraphs[0]
+                         if not p.runs:
+                             p.add_run()
+                         
+                         # Base sizing logic (adjust thresholds as needed)
+                         if text_len > 300:
+                             font_size = Pt(12)
+                         elif text_len > 200:
+                             font_size = Pt(14)
+                         elif text_len > 100:
+                             font_size = Pt(18)
+                         else:
+                             # Keep template default or set a standard size
+                             font_size = Pt(24)
+                             
+                         # Apply to ALL runs in ALL paragraphs
+                         for paragraph in shape.text_frame.paragraphs:
+                             for run in paragraph.runs:
+                                 run.font.size = font_size
+                                 
+                     shape.text_frame.word_wrap = True
+                except Exception as e:
+                    print(f"Error sizing text: {e}")
                 
             elif isinstance(value, dict) and value.get("type") == "image":
                 # Image fill
