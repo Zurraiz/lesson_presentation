@@ -40,7 +40,8 @@ class ImageSearchService:
                 'num': min(num_results, 10),
                 'safe': 'active',  # Safe search for educational content
                 'imgSize': 'large',
-                'fileType': 'jpg|png'
+                'fileType': 'jpg|png',
+                'rights': 'cc_publicdomain|cc_attribute|cc_sharealike'  # Filter for usable images to avoid Access Denied errors
             }
             
             response = requests.get(self.base_url, params=params, timeout=10)

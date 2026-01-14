@@ -11,7 +11,7 @@ class GeminiService:
             self.model = None
         else:
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
 
     def generate_lesson_outline(self, topic, grade_level, duration, available_layouts):
         """
@@ -56,7 +56,8 @@ class GeminiService:
         1. Return a JSON object where keys are the Placeholder Indices (as strings) and values are the text content.
         2. Content must be educational, engaging, and appropriate for the grade level.
         3. Do NOT include markdown in the values (no **bold**, etc will render as literal stars in PPT).
-        4. For 'image' placeholders, generate a "search_query" object: {{"type": "image", "query": "descriptive search term"}}
+        4. For 'image' placeholders OR generic 'content' placeholders where a visual aids understanding, generate a "search_query" object: {{"type": "image", "query": "descriptive search term"}}
+        5. Prioritize including at least one image per slide if the layout permits.
         
         Output purely JSON.
         """
