@@ -113,6 +113,14 @@ class TemplateManager:
                     continue
                 shape.text = value
                 
+                # Enable Auto-Fit "Shrink text on overflow"
+                try:
+                    from pptx.enum.text import MSO_AUTO_SIZE
+                    shape.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+                    shape.text_frame.word_wrap = True
+                except Exception:
+                    pass
+                
             elif isinstance(value, dict) and value.get("type") == "image":
                 # Image fill
                 image_url = value.get("url")

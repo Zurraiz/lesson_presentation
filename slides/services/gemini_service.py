@@ -11,7 +11,7 @@ class GeminiService:
             self.model = None
         else:
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            self.model = genai.GenerativeModel('gemini-3-flash-preview')
 
     def generate_lesson_outline(self, topic, grade_level, duration, available_layouts):
         """
@@ -56,8 +56,13 @@ class GeminiService:
         1. Return a JSON object where keys are the Placeholder Indices (as strings) and values are the text content.
         2. Content must be educational, engaging, and appropriate for the grade level.
         3. Do NOT include markdown in the values (no **bold**, etc will render as literal stars in PPT).
-        4. For 'image' placeholders OR generic 'content' placeholders where a visual aids understanding, generate a "search_query" object: {{"type": "image", "query": "descriptive search term"}}
+        4. For 'image' placeholders OR generic 'content' placeholders where a visual aids understanding, generate a "search_query" object: {{"type": "image", "query": "KEYWORD SEARCH TERMS"}}.
+           - The query MUST be simple, effective keywords for Google Images (2-4 words max).
+           - Good: "photosynthesis diagram", "Abraham Lincoln portrait", "DNA double helix"
+           - Bad: "a diagram showing how photosynthesis works for 5th grade students" (Too specific, will fail)
         5. Prioritize including at least one image per slide if the layout permits.
+        6. Keep text content concise to avoid overflow. 
+        7. **IMPORTANT**: Do NOT use bullet points (* or -) in the text. PowerPoint adds bullets automatically. Just separate distinct points with newlines.
         
         Output purely JSON.
         """
@@ -85,6 +90,8 @@ class GeminiService:
                 prompt,
                 generation_config={'response_mime_type': 'application/json'}
             )
+            print('--------------')
+            print(response)
             return json.loads(response.text)
         except Exception as e:
             print(f"Gemini Error: {e}")
