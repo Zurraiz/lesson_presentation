@@ -50,21 +50,23 @@ const app = {
     generateOutline: async () => {
         const topic = document.getElementById('input-topic').value;
         const grade = document.getElementById('input-grade').value;
-        const duration = document.getElementById('input-duration').value;
+        const duration = document.getElementById('input-duration').value || '45 minutes';
 
         if (!topic) return alert('Please enter a topic');
         if (!app.state.selectedTemplate) return alert('Please select a template');
 
         const btn = document.querySelector('button[type="submit"]');
         const origText = btn.innerText;
-        btn.innerText = 'Generating Outline...';
+        btn.innerText = 'Generating Presentation...';
         btn.disabled = true;
 
+        app.state.config = { topic, grade, duration };
+
         try {
-            const res = await fetch('/api/generate/outline/', {
+            const res = await fetch('/api/generate/oneshot/', {
                 method: 'POST',
                 body: JSON.stringify({
-                    topic, grade, duration,
+                    topic, grade,
                     template_filename: app.state.selectedTemplate.filename
                 })
             });
@@ -72,13 +74,24 @@ const app = {
 
             if (data.error) throw new Error(data.error);
 
-            app.state.outline = data.outline;
-            app.state.config = { topic, grade, duration };
+            // Set both outline and full content from the single response
+            app.state.outline = data.slides;
+            app.state.slidesContent = data.slides.map(s => ({
+                layout_id: s.layout_id,
+                content: s.content
+            }));
 
-            app.renderOutline();
-            app.goToStep('outline');
+            // Transition to generation view and start building immediately
+            app.goToStep('generation');
+            const progressBar = document.getElementById('gen-progress-bar');
+            const statusText = document.getElementById('gen-status-details');
+
+            progressBar.style.width = '100%';
+            statusText.innerText = 'Content generated! Building PowerPoint...';
+
+            await app.buildPresentation();
         } catch (err) {
-            alert('Error generating outline: ' + err.message);
+            alert('Error generating presentation: ' + err.message);
         } finally {
             btn.innerText = origText;
             btn.disabled = false;

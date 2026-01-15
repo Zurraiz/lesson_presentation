@@ -11,7 +11,53 @@ class GeminiService:
             self.model = None
         else:
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-3-flash-preview')
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
+
+    def generate_full_presentation(self, topic, grade_level, duration, available_layouts):
+        """
+        Generates the ENTIRE presentation (Outline + Content) in a single API call.
+        """
+        # Build a schema description for the AI
+        layouts_desc = []
+        for l in available_layouts:
+            placeholders_str = ", ".join([f"{p['index']} ({p['name']})" for p in l['placeholders']])
+            layouts_desc.append(f"Layout ID {l['id']} ({l['name']}): Placeholders [{placeholders_str}]")
+            
+        layouts_prompt = "\n".join(layouts_desc)
+        
+        prompt = f"""
+        Act as an expert teacher. Create a complete lesson presentation plan and content on "{topic}" for Grade {grade_level}.
+        Duration: {duration}.
+        
+        Available Slide Layouts:
+        {layouts_prompt}
+        
+        Instructions:
+        1. Select 5-8 slides for the lesson.
+        2. For EACH slide, choose the best Layout ID and generate full content.
+        3. **Content Rules**:
+           - Fill EVERY placeholder for the chosen layout.
+           - For images, use {{"type": "image", "query": "2-4 KEYWORD SEARCH TERMS"}}.
+           - Do NOT use bullet points (* or -), use newlines.
+           - Scale text: longer text is acceptable.
+           
+        Output JSON Format:
+        {{
+            "slides": [
+                {{
+                    "slide_number": 1,
+                    "title": "Slide Title",
+                    "layout_id": 0,
+                    "content": {{
+                        "0": "Title",
+                        "10": "Subtitle..." 
+                    }}
+                }},
+                ...
+            ]
+        }}
+        """
+        return self._call_gemini_json(prompt)
 
     def generate_lesson_outline(self, topic, grade_level, duration, available_layouts):
         """

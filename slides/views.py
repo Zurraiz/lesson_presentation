@@ -45,6 +45,35 @@ def list_templates(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def generate_one_shot(request):
+    """
+    Generates entire presentation (Outline + Content) in one go.
+    """
+    try:
+        data = json.loads(request.body)
+        topic = data.get("topic")
+        grade = data.get("grade")
+        
+        # Get defaults
+        template_filename = data.get("template_filename", "modern_template.pptx")
+        template_path = os.path.join(TEMPLATES_DIR, template_filename)
+        
+        tm = TemplateManager(template_path)
+        layouts = tm.analyze_template().get("layouts", [])
+        
+        gemini = GeminiService()
+        result = gemini.generate_full_presentation(topic, grade, "45 minutes", layouts)
+        
+        if not result or "slides" not in result:
+             return JsonResponse({"error": "Failed to generate presentation"}, status=500)
+             
+        return JsonResponse({"slides": result["slides"], "outline": result["slides"]})
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def generate_outline(request):
     """
     Step 1: Generate a lesson outline (list of slides) based on topic.
