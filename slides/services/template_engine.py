@@ -4,6 +4,8 @@ from io import BytesIO
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.shapes import PP_PLACEHOLDER
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE
 from django.conf import settings
 
 class TemplateManager:
@@ -30,12 +32,16 @@ class TemplateManager:
                 ph_name = ph.name
                 ph_idx = ph.placeholder_format.idx
                 
+                is_generic = ph_type in [PP_PLACEHOLDER.OBJECT, PP_PLACEHOLDER.BODY]
+                
                 placeholders.append({
                     "index": ph_idx,
                     "name": ph_name,
-                    "type": str(ph_type), # enum value, helpful for debugging
+                    "type": str(ph_type), 
                     "is_title": "title" in ph_name.lower() or ph_type == PP_PLACEHOLDER.TITLE,
-                    "is_image": "picture" in ph_name.lower() or ph_type == PP_PLACEHOLDER.PICTURE
+                    "is_image": is_generic or "picture" in ph_name.lower() or ph_type in [PP_PLACEHOLDER.PICTURE, PP_PLACEHOLDER.BITMAP],
+                    "is_table": is_generic or "table" in ph_name.lower() or ph_type == PP_PLACEHOLDER.TABLE,
+                    "is_chart": is_generic or "chart" in ph_name.lower() or ph_type == PP_PLACEHOLDER.CHART
                 })
             
             layouts_info.append({
@@ -148,6 +154,14 @@ class TemplateManager:
                 image_url = value.get("url")
                 if image_url:
                     self._insert_image(shape, image_url)
+            
+            elif isinstance(value, dict) and value.get("type") == "table":
+                # Table fill
+                self._insert_table(shape, value)
+            
+            elif isinstance(value, dict) and value.get("type") == "chart":
+                # Chart fill
+                self._insert_chart(shape, value)
 
     def _insert_image(self, shape, image_url):
         """
@@ -177,3 +191,64 @@ class TemplateManager:
             # Optionally set text to error message
             if shape.has_text_frame:
                 shape.text = f"[Error loading image]"
+
+    def _insert_table(self, shape, data):
+        """
+        Inserts a table into a placeholder.
+        data: {"headers": ["Col1", "Col2"], "rows": [["v1", "v2"], ...]}
+        """
+        try:
+            headers = data.get("headers", [])
+            rows = data.get("rows", [])
+            
+            num_rows = len(rows) + (1 if headers else 0)
+            num_cols = len(headers) if headers else (len(rows[0]) if rows else 0)
+            
+            if num_rows == 0 or num_cols == 0:
+                return
+                
+            # insert_table returns a GraphicFrame object containing the Table
+            if hasattr(shape, 'insert_table'):
+                table_frame = shape.insert_table(rows=num_rows, cols=num_cols)
+                table = table_frame.table
+                
+                # Fill headers
+                if headers:
+                    for i, h in enumerate(headers):
+                        table.cell(0, i).text = str(h)
+                
+                # Fill rows
+                start_row = 1 if headers else 0
+                for r_idx, row_data in enumerate(rows):
+                    for c_idx, val in enumerate(row_data):
+                        if c_idx < num_cols:
+                            table.cell(r_idx + start_row, c_idx).text = str(val)
+            else:
+                print(f"Shape {shape.name} does not support table insertion.")
+                
+        except Exception as e:
+            print(f"Failed to insert table: {e}")
+
+    def _insert_chart(self, shape, data):
+        """
+        Inserts a chart into a placeholder.
+        data: {"chart_type": "...", "categories": ["X", "Y"], "series": [{"name": "S1", "values": [10, 20]}]}
+        """
+        try:
+            chart_data = CategoryChartData()
+            chart_data.categories = data.get("categories", [])
+            
+            for s in data.get("series", []):
+                chart_data.add_series(s.get("name", ""), s.get("values", []))
+                
+            # Default to Bar if not specified/invalid
+            c_type_str = data.get("chart_type", "BAR_CLUSTERED").upper()
+            c_type = getattr(XL_CHART_TYPE, c_type_str, XL_CHART_TYPE.BAR_CLUSTERED)
+            
+            if hasattr(shape, 'insert_chart'):
+                shape.insert_chart(c_type, chart_data)
+            else:
+                print(f"Shape {shape.name} does not support chart insertion.")
+                
+        except Exception as e:
+            print(f"Failed to insert chart: {e}")

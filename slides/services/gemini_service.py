@@ -20,8 +20,15 @@ class GeminiService:
         # Build a schema description for the AI
         layouts_desc = []
         for l in available_layouts:
-            placeholders_str = ", ".join([f"{p['index']} ({p['name']})" for p in l['placeholders']])
-            layouts_desc.append(f"Layout ID {l['id']} ({l['name']}): Placeholders [{placeholders_str}]")
+            ph_info = []
+            for p in l['placeholders']:
+                types = ["Text"]
+                if p.get('is_image'): types.append("Image")
+                if p.get('is_table'): types.append("Table")
+                if p.get('is_chart'): types.append("Chart")
+                ph_info.append(f"{p['index']} ({p['name']}, supports: {', '.join(types)})")
+            
+            layouts_desc.append(f"Layout ID {l['id']} ({l['name']}): [{', '.join(ph_info)}]")
             
         layouts_prompt = "\n".join(layouts_desc)
         
@@ -29,28 +36,34 @@ class GeminiService:
         Act as an expert teacher. Create a complete lesson presentation plan and content on "{topic}" for Grade {grade_level}.
         Duration: {duration}.
         
-        Available Slide Layouts:
+        Available Slide Layouts (and what each placeholder supports):
         {layouts_prompt}
+        
+        Your goal is to be highly visual and interactive. Use Tables and Charts whenever the layout supports them and it helps the lesson.
         
         Instructions:
         1. Select 5-8 slides for the lesson.
         2. For EACH slide, choose the best Layout ID and generate full content.
-        3. **Content Rules**:
+        3. **Data Formats**:
+           - **Text**: Plain string.
+           - **Image**: {{"type": "image", "query": "2-4 keyword search term"}}
+           - **Table**: {{"type": "table", "headers": ["Heading 1", "Heading 2"], "rows": [["val 1", "val 2"], ["val 3", "val 4"]]}}
+           - **Chart**: {{"type": "chart", "chart_type": "BAR_CLUSTERED", "categories": ["X", "Y"], "series": [{{"name": "Series 1", "values": [10, 20]}}]}}
+             (Chart Types allowed: BAR_CLUSTERED, COLUMN_CLUSTERED, LINE, PIE)
+        4. **Rules**:
            - Fill EVERY placeholder for the chosen layout.
-           - For images, use {{"type": "image", "query": "2-4 KEYWORD SEARCH TERMS"}}.
-           - Do NOT use bullet points (* or -), use newlines.
-           - Scale text: longer text is acceptable.
+           - Do NOT use bullet points (* or -), use newlines for separate ideas.
            
         Output JSON Format:
         {{
             "slides": [
                 {{
                     "slide_number": 1,
-                    "title": "Slide Title",
+                    "title": "...",
                     "layout_id": 0,
                     "content": {{
                         "0": "Title",
-                        "10": "Subtitle..." 
+                        "10": "..."
                     }}
                 }},
                 ...
