@@ -1,6 +1,7 @@
 import os
 import requests
 from io import BytesIO
+from PIL import Image
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.shapes import PP_PLACEHOLDER
@@ -97,71 +98,108 @@ class TemplateManager:
     def _fill_slide(self, slide, content_map):
         """
         Fills a single slide's placeholders with content.
-        content_map: Key is placeholder_idx, Value is text string or dict for images.
+        Includes robust fallback logic (fuzzy matching) if AI provides wrong indices.
         """
-        for ph_idx, value in content_map.items():
-            # Convert key to int if it came from JSON as string
+        # 1. Map available placeholders by index and by type
+        available_phs = {} # index -> shape
+        by_type = {
+            "title": [],
+            "image": [],
+            "table": [],
+            "chart": [],
+            "text": []
+        }
+        
+        for ph in slide.placeholders:
+            ph_idx = ph.placeholder_format.idx
+            ph_type = ph.placeholder_format.type
+            ph_name = ph.name.lower()
+            available_phs[ph_idx] = ph
+            
+            # Categorize
+            if ph_type == PP_PLACEHOLDER.TITLE or "title" in ph_name:
+                by_type["title"].append(ph)
+            elif ph_type in [PP_PLACEHOLDER.PICTURE, PP_PLACEHOLDER.BITMAP] or "picture" in ph_name:
+                by_type["image"].append(ph)
+            elif ph_type == PP_PLACEHOLDER.TABLE or "table" in ph_name:
+                by_type["table"].append(ph)
+            elif ph_type == PP_PLACEHOLDER.CHART or "chart" in ph_name:
+                by_type["chart"].append(ph)
+            else:
+                by_type["text"].append(ph)
+
+        # 2. Process content
+        unmatched_content = []
+        
+        for raw_idx, value in content_map.items():
             try:
-                ph_idx = int(ph_idx)
-            except ValueError:
+                look_idx = int(raw_idx)
+            except:
+                unmatched_content.append(value)
                 continue
                 
-            # Find the placeholder on the slide
-            try:
-                shape = slide.placeholders[ph_idx]
-            except KeyError:
-                # Placeholder not found on this slide layout
-                continue
-                
-            if isinstance(value, str):
-                # Simple text fill
-                if not shape.has_text_frame:
-                    continue
-                shape.text = value
-                
-                # Manual Dynamic Font Scaling
-                # Heuristic: The more text, the smaller the font.
-                try:
-                     text_len = len(value)
-                     # Get the first paragraph/run to set font
-                     if shape.text_frame.paragraphs:
-                         p = shape.text_frame.paragraphs[0]
-                         if not p.runs:
-                             p.add_run()
-                         
-                         # Base sizing logic (adjust thresholds as needed)
-                         if text_len > 300:
-                             font_size = Pt(12)
-                         elif text_len > 200:
-                             font_size = Pt(14)
-                         elif text_len > 100:
-                             font_size = Pt(18)
-                         else:
-                             # Keep template default or set a standard size
-                             font_size = Pt(24)
-                             
-                         # Apply to ALL runs in ALL paragraphs
-                         for paragraph in shape.text_frame.paragraphs:
-                             for run in paragraph.runs:
-                                 run.font.size = font_size
-                                 
-                     shape.text_frame.word_wrap = True
-                except Exception as e:
-                    print(f"Error sizing text: {e}")
-                
-            elif isinstance(value, dict) and value.get("type") == "image":
-                # Image fill
-                image_url = value.get("url")
-                if image_url:
-                    self._insert_image(shape, image_url)
+            # Attempt exact match
+            if look_idx in available_phs:
+                self._fill_shape(available_phs[look_idx], value)
+                available_phs.pop(look_idx) # Mark as used
+            else:
+                unmatched_content.append(value)
+
+        # 3. Fallback: Fuzzy match unmatched content to remaining placeholders
+        for value in unmatched_content:
+            target_type = "text"
+            if isinstance(value, dict):
+                v_type = value.get("type")
+                if v_type in ["image", "table", "chart"]:
+                    target_type = v_type
             
-            elif isinstance(value, dict) and value.get("type") == "table":
-                # Table fill
-                self._insert_table(shape, value)
+            # Priority 1: Direct type match (if available)
+            if by_type[target_type]:
+                ph = by_type[target_type].pop(0)
+                self._fill_shape(ph, value)
+            # Priority 2: Try "text" placeholder if it's a string
+            elif target_type == "text" and by_type["text"]:
+                ph = by_type["text"].pop(0)
+                self._fill_shape(ph, value)
+
+    def _fill_shape(self, shape, value):
+        """Helper to route value to the correct insertion method for a shape."""
+        if isinstance(value, str):
+            # Text routing
+            if not shape.has_text_frame:
+                return
+            shape.text = value
+            self._apply_font_scaling(shape, value)
             
-            elif isinstance(value, dict) and value.get("type") == "chart":
-                # Chart fill
-                self._insert_chart(shape, value)
+        elif isinstance(value, dict) and value.get("type") == "image":
+            self._insert_image(shape, value.get("url"))
+            
+        elif isinstance(value, dict) and value.get("type") == "table":
+            self._insert_table(shape, value)
+            
+        elif isinstance(value, dict) and value.get("type") == "chart":
+            self._insert_chart(shape, value)
+
+    def _apply_font_scaling(self, shape, text):
+        """Dynamic Font Scaling logic."""
+        try:
+            text_len = len(text)
+            if shape.text_frame.paragraphs:
+                p = shape.text_frame.paragraphs[0]
+                if not p.runs: p.add_run()
+                
+                if text_len > 300: font_size = Pt(12)
+                elif text_len > 200: font_size = Pt(14)
+                elif text_len > 100: font_size = Pt(18)
+                else: font_size = Pt(24)
+                
+                for paragraph in shape.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.size = font_size
+                        
+            shape.text_frame.word_wrap = True
+        except Exception as e:
+            print(f"Error sizing text: {e}")
 
     def _insert_image(self, shape, image_url):
         """
@@ -175,12 +213,25 @@ class TemplateManager:
             }
             response = requests.get(image_url, headers=headers, timeout=10)
             response.raise_for_status()
-            image_stream = BytesIO(response.content)
             
+            # Use Pillow to ensure image is in a supported format (e.g. convert WEBP to PNG)
+            image_stream = BytesIO(response.content)
+            try:
+                img = Image.open(image_stream)
+                # Convert to RGB/RGBA then to PNG if not already a standard format
+                # This fixes the "WEBP" not supported issue in many PPT versions
+                converted_stream = BytesIO()
+                img.save(converted_stream, format='PNG')
+                converted_stream.seek(0)
+                final_stream = converted_stream
+            except Exception as img_err:
+                print(f"Pillow conversion failed, trying raw stream: {img_err}")
+                image_stream.seek(0)
+                final_stream = image_stream
+
             # If it's a proper placeholder, insert_picture creates a NEW shape and replaces the placeholder
-            # python-pptx's placeholder.insert_picture is the way.
             if hasattr(shape, 'insert_picture'):
-                shape.insert_picture(image_stream)
+                shape.insert_picture(final_stream)
             else:
                 # Fallback if it's not a picture placeholder but we want to force it? 
                 # For now stick to strict placeholder behavior.

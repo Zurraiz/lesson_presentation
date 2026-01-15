@@ -44,13 +44,16 @@ class GeminiService:
         Instructions:
         1. Select 5-8 slides for the lesson.
         2. For EACH slide, choose the best Layout ID and generate full content.
-        3. **Data Formats**:
+        3. **Variety Rules**:
+           - Do NOT use the same Layout ID more than 3 times in one presentation.
+           - Use at least one Table and/or one Chart if the template layouts allow for them.
+        4. **Data Formats**:
            - **Text**: Plain string.
            - **Image**: {{"type": "image", "query": "2-4 keyword search term"}}
            - **Table**: {{"type": "table", "headers": ["Heading 1", "Heading 2"], "rows": [["val 1", "val 2"], ["val 3", "val 4"]]}}
            - **Chart**: {{"type": "chart", "chart_type": "BAR_CLUSTERED", "categories": ["X", "Y"], "series": [{{"name": "Series 1", "values": [10, 20]}}]}}
              (Chart Types allowed: BAR_CLUSTERED, COLUMN_CLUSTERED, LINE, PIE)
-        4. **Rules**:
+        5. **Rules**:
            - Fill EVERY placeholder for the chosen layout.
            - Do NOT use bullet points (* or -), use newlines for separate ideas.
            
